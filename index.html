@@ -335,6 +335,7 @@ function listenOnce(button, onResult){
   recognition.onresult = (event) => {
     const transcript = event.results[0][0].transcript;
     button.classList.remove('listening');
+    setStatus('Verstanden: „' + transcript + '". Ich suche jetzt danach …', null);
     onResult(transcript);
   };
   recognition.onerror = (event) => {
