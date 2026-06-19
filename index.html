@@ -133,6 +133,9 @@
   <!-- REGAL MODUS -->
   <div id="panel-regal" class="actions">
     <button class="action btn-primary" id="btnRegalScan">📷 Regal fotografieren</button>
+    <div class="thumbs" id="regalThumbWrap" style="display:none;">
+      <img id="regalThumb" style="width:120px;height:90px;">
+    </div>
     <button class="action btn-secondary" id="btnRegalAsk" disabled>🎤 Frage stellen</button>
     <div class="fallback">
       <label for="textRegal">Oder Suchbegriff eingeben:</label>
@@ -210,6 +213,8 @@ function setStatus(text, kind, alsoSpeak){
 }
 
 // ---------- Kamera ----------
+let cameraReady = false;
+
 async function initCamera(){
   try{
     const stream = await navigator.mediaDevices.getUserMedia({
@@ -217,14 +222,23 @@ async function initCamera(){
       audio: false
     });
     video.srcObject = stream;
-    cameraHint.style.display = 'none';
+    video.onloadedmetadata = () => {
+      video.play().catch(() => {});
+      cameraReady = true;
+      cameraHint.style.display = 'none';
+    };
   }catch(e){
     cameraHint.textContent = 'Kein Kamerazugriff möglich (Berechtigung fehlt oder nicht unterstützt).';
     setStatus('Kamera konnte nicht gestartet werden. Bitte Kamerazugriff erlauben.', 'warn');
   }
 }
 
+// Gibt null zurück, wenn die Kamera noch kein echtes Bild liefert
+// (z. B. direkt nach Erteilen der Berechtigung) statt ein leeres Foto zu erzeugen.
 function capturePhotoBase64(){
+  if(!cameraReady || !video.videoWidth || !video.videoHeight){
+    return null;
+  }
   const maxW = 1024;
   const scale = Math.min(1, maxW / video.videoWidth);
   canvas.width = video.videoWidth * scale;
@@ -332,12 +346,7 @@ function listenOnce(button, onResult){
 async function callClaude(contentBlocks){
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': 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,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true'
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: 'claude-sonnet-4-6',
       max_tokens: 1000,
@@ -365,10 +374,21 @@ const textRegal = document.getElementById('textRegal');
 const btnTextRegal = document.getElementById('btnTextRegal');
 
 btnRegalScan.addEventListener('click', async () => {
+  const captured = capturePhotoBase64();
+  if(!captured){
+    setStatus('Die Kamera ist noch nicht ganz bereit. Bitte eine Sekunde warten und erneut versuchen.', 'warn');
+    return;
+  }
   btnRegalScan.disabled = true;
   setStatus('Foto wird gemacht und analysiert …', null);
   try{
-    regalPhoto = capturePhotoBase64();
+    regalPhoto = captured;
+    const regalThumb = document.getElementById('regalThumb');
+    const regalThumbWrap = document.getElementById('regalThumbWrap');
+    if(regalThumb && regalThumbWrap){
+      regalThumb.src = 'data:image/jpeg;base64,' + regalPhoto;
+      regalThumbWrap.style.display = 'block';
+    }
     const prompt = 'Du bist ein Einkaufs-Assistent für blinde und sehbehinderte Menschen. ' +
       'Das Bild zeigt ein Regal in einem Laden. Beschreibe in maximal zwei kurzen Sätzen, ' +
       'welche Warengruppe oder Produktkategorie hier zu sehen ist. Nur Fließtext zum Vorlesen, keine Aufzählungen, keine Markdown-Zeichen.';
@@ -428,6 +448,10 @@ function refreshLadenUI(){
 
 btnLadenAdd.addEventListener('click', () => {
   const b64 = capturePhotoBase64();
+  if(!b64){
+    setStatus('Die Kamera ist noch nicht ganz bereit. Bitte eine Sekunde warten und erneut versuchen.', 'warn');
+    return;
+  }
   ladenPhotos.push({ b64: b64, heading: currentHeading });
   refreshLadenUI();
   setStatus('Foto Nummer ' + ladenPhotos.length + ' aufgenommen.', null);
@@ -462,6 +486,9 @@ function startAuto(){
       return;
     }
     const b64 = capturePhotoBase64();
+    if(!b64){
+      return; // Kamera noch nicht bereit, diesen Tick einfach überspringen
+    }
     ladenPhotos.push({ b64: b64, heading: currentHeading });
     refreshLadenUI();
     btnLadenAsk.disabled = true; // während Automatik bleibt Fragen gesperrt
