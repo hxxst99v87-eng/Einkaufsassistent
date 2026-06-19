@@ -130,6 +130,11 @@
     Willkommen. Tippe auf „Regal fotografieren", um zu starten.
   </div>
 
+  <!-- ALLGEMEINE SZENEN-BESCHREIBUNG (immer verfügbar, unabhängig vom Modus) -->
+  <button class="action" id="btnDescribe" style="background:var(--ok);color:#062b0c;margin-bottom:18px;">
+    👁️ Was ist vor mir?
+  </button>
+
   <!-- REGAL MODUS -->
   <div id="panel-regal" class="actions">
     <button class="action btn-primary" id="btnRegalScan">📷 Regal fotografieren</button>
@@ -366,6 +371,31 @@ function imgBlock(b64){
 function textBlock(t){
   return { type: 'text', text: t };
 }
+
+// ---------- Allgemeine Szenen-Beschreibung ("Was ist vor mir?") ----------
+const btnDescribe = document.getElementById('btnDescribe');
+
+btnDescribe.addEventListener('click', async () => {
+  const captured = capturePhotoBase64();
+  if(!captured){
+    setStatus('Die Kamera ist noch nicht ganz bereit. Bitte eine Sekunde warten und erneut versuchen.', 'warn');
+    return;
+  }
+  btnDescribe.disabled = true;
+  setStatus('Ich schaue mir an, was vor dir ist …', null);
+  try{
+    const prompt = 'Du bist ein Assistent für blinde und sehbehinderte Menschen. Beschreibe in maximal drei kurzen ' +
+      'Sätzen, was auf dem Foto zu sehen ist: die wichtigsten Gegenstände, Personen oder die Umgebung, und wo sie sich ' +
+      'ungefähr befinden (links, mittig, rechts; nah oder weiter weg). Sei konkret, aber knapp. ' +
+      'Nur Fließtext zum Vorlesen, keine Aufzählungen, keine Markdown-Zeichen.';
+    const answer = await callClaude([imgBlock(captured), textBlock(prompt)]);
+    setStatus(answer, 'ok');
+  }catch(e){
+    setStatus('Die Beschreibung hat nicht funktioniert. Bitte erneut versuchen.', 'warn');
+  }finally{
+    btnDescribe.disabled = false;
+  }
+});
 
 // ---------- Regal-Modus ----------
 const btnRegalScan = document.getElementById('btnRegalScan');
